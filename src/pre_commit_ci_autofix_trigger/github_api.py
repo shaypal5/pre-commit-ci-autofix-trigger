@@ -38,7 +38,12 @@ class GitHubClient:
             )
         if not response.content:
             return {}
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise GitHubApiError(
+                f"GitHub API {method} {path} returned non-JSON response: {exc}"
+            ) from exc
 
     def get_pr(self, pr_number: int) -> dict:
         return self._request("GET", f"/repos/{self.owner}/{self.repo}/pulls/{pr_number}")
@@ -57,6 +62,11 @@ class GitHubClient:
             "GET",
             f"/repos/{self.owner}/{self.repo}/commits/{ref}/check-runs",
         )
+        if not isinstance(data, dict):
+            raise GitHubApiError(
+                "Unexpected response shape from check-runs endpoint: "
+                f"expected dict, got {type(data).__name__}"
+            )
         return list(data.get("check_runs", []))
 
     def get_commit_statuses(self, ref: str) -> list[dict]:
@@ -64,6 +74,11 @@ class GitHubClient:
             "GET",
             f"/repos/{self.owner}/{self.repo}/commits/{ref}/status",
         )
+        if not isinstance(data, dict):
+            raise GitHubApiError(
+                "Unexpected response shape from commit-status endpoint: "
+                f"expected dict, got {type(data).__name__}"
+            )
         return list(data.get("statuses", []))
 
     def add_label(self, pr_number: int, label: str) -> list[dict]:

@@ -47,6 +47,9 @@ jobs:
     steps:
       - name: Check out workflow repository
         uses: actions/checkout@v4
+        with:
+          repository: shaypal5/pre-commit-ci-autofix-trigger
+          ref: ${{ github.workflow_sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5

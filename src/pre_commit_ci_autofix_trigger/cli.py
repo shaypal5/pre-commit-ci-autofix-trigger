@@ -65,7 +65,8 @@ def run(argv: list[str] | None = None) -> int:
         pr = client.get_pr(args.pr_number)
         author_login = str(pr.get("user", {}).get("login", ""))
         head_sha = args.head_sha or str(pr.get("head", {}).get("sha", ""))
-        labels = list(pr.get("labels", [])) or client.list_issue_labels(args.pr_number)
+        labels_raw = pr.get("labels")
+        labels = labels_raw if labels_raw is not None else client.list_issue_labels(args.pr_number)
 
         if not head_sha:
             raise GitHubApiError("PR head SHA missing from API response")
