@@ -1,0 +1,83 @@
+name: Reusable pre-commit.ci autofix trigger
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: Pull request number
+        required: true
+        type: number
+      repo_owner:
+        description: Repository owner (defaults to caller owner)
+        required: false
+        type: string
+      repo_name:
+        description: Repository name (defaults to caller repo)
+        required: false
+        type: string
+      bot_logins:
+        description: Comma-separated allowlist of bot logins
+        required: false
+        default: copilot-swe-agent,github-copilot[bot],copilot,claude[bot],claude,chatgpt,openai
+        type: string
+      label:
+        description: Label to apply when autofix should be triggered
+        required: false
+        default: pre-commit.ci autofix
+        type: string
+      dry_run:
+        description: If true, logs decision without mutating labels
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      github_token:
+        required: false
+
+permissions:
+  pull-requests: read
+  contents: read
+  checks: read
+  statuses: read
+  issues: write
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out workflow repository
+        uses: actions/checkout@v4
+        with:
+          repository: shaypal5/pre-commit-ci-autofix-trigger
+          ref: ${{ github.workflow_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install package
+        run: python -m pip install .
+
+      - name: Resolve caller repo parts
+        id: repo
+        shell: bash
+        run: |
+          owner="${{ inputs.repo_owner }}"
+          name="${{ inputs.repo_name }}"
+          if [ -z "$owner" ]; then owner="${{ github.repository_owner }}"; fi
+          if [ -z "$name" ]; then name="${{ github.event.repository.name }}"; fi
+          echo "owner=$owner" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger pre-commit.ci autofix label
+        env:
+          GITHUB_TOKEN: ${{ secrets.github_token || github.token }}
+        run: |
+          pre-commit-ci-autofix-trigger \
+            --repo-owner "${{ steps.repo.outputs.owner }}" \
+            --repo-name "${{ steps.repo.outputs.name }}" \
+            --pr-number "${{ inputs.pr_number }}" \
+            --bot-logins "${{ inputs.bot_logins }}" \
+            --label "${{ inputs.label }}" \
+            ${{ inputs.dry_run && '--dry-run' || '' }}
