@@ -35,7 +35,7 @@ on:
         required: false
 
 permissions:
-  pull-requests: write
+  pull-requests: read
   contents: read
   checks: read
   statuses: read

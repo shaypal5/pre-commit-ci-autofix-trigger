@@ -26,7 +26,7 @@ class GitHubClient:
             "X-GitHub-Api-Version": "2022-11-28",
         }
 
-    def _request(self, method: str, path: str, **kwargs: object) -> dict:
+    def _request(self, method: str, path: str, **kwargs: object) -> dict | list:
         url = f"{self.api_base}{path}"
         if requests is None:
             raise GitHubApiError("The 'requests' package is required to call the GitHub API")
@@ -45,7 +45,12 @@ class GitHubClient:
 
     def list_issue_labels(self, pr_number: int) -> list[dict]:
         data = self._request("GET", f"/repos/{self.owner}/{self.repo}/issues/{pr_number}/labels")
-        return list(data)
+        if not isinstance(data, list):
+            raise GitHubApiError(
+                "Unexpected response shape from labels endpoint: "
+                f"expected list, got {type(data).__name__}"
+            )
+        return data
 
     def get_check_runs(self, ref: str) -> list[dict]:
         data = self._request(
@@ -67,4 +72,9 @@ class GitHubClient:
             f"/repos/{self.owner}/{self.repo}/issues/{pr_number}/labels",
             json={"labels": [label]},
         )
-        return list(data)
+        if not isinstance(data, list):
+            raise GitHubApiError(
+                "Unexpected response shape from add-label endpoint: "
+                f"expected list, got {type(data).__name__}"
+            )
+        return data
