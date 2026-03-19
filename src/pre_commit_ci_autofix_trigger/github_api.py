@@ -48,6 +48,18 @@ class GitHubClient:
     def get_pr(self, pr_number: int) -> dict:
         return self._request("GET", f"/repos/{self.owner}/{self.repo}/pulls/{pr_number}")
 
+    def list_pulls_for_commit(self, ref: str) -> list[dict]:
+        data = self._request(
+            "GET",
+            f"/repos/{self.owner}/{self.repo}/commits/{ref}/pulls",
+        )
+        if not isinstance(data, list):
+            raise GitHubApiError(
+                "Unexpected response shape from commit-pulls endpoint: "
+                f"expected list, got {type(data).__name__}"
+            )
+        return data
+
     def list_issue_labels(self, pr_number: int) -> list[dict]:
         data = self._request("GET", f"/repos/{self.owner}/{self.repo}/issues/{pr_number}/labels")
         if not isinstance(data, list):

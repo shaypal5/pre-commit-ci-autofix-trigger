@@ -5,7 +5,7 @@ on:
     inputs:
       pr_number:
         description: Pull request number
-        required: true
+        required: false
         type: number
       repo_owner:
         description: Repository owner (defaults to caller owner)
@@ -83,10 +83,13 @@ jobs:
             pre-commit-ci-autofix-trigger
             --repo-owner "${{ steps.repo.outputs.owner }}"
             --repo-name "${{ steps.repo.outputs.name }}"
-            --pr-number "${{ inputs.pr_number }}"
             --bot-logins "${{ inputs.bot_logins }}"
             --label "${{ inputs.label }}"
           )
+
+          if [ "${{ inputs.pr_number }}" != "" ] && [ "${{ inputs.pr_number }}" != "0" ]; then
+            cmd+=(--pr-number "${{ inputs.pr_number }}")
+          fi
 
           if [ -n "${{ inputs.head_sha }}" ]; then
             cmd+=(--head-sha "${{ inputs.head_sha }}")

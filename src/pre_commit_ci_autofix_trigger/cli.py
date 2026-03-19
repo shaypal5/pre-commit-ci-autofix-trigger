@@ -26,13 +26,36 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--repo-owner", default=os.getenv("GITHUB_REPOSITORY_OWNER"))
     parser.add_argument("--repo-name")
-    parser.add_argument("--pr-number", type=int, required=True)
+    parser.add_argument("--pr-number", type=int)
     parser.add_argument("--head-sha")
     parser.add_argument("--bot-logins", default=os.getenv("BOT_LOGINS", DEFAULT_BOT_LOGINS))
     parser.add_argument("--label", default=os.getenv("AUTOFIX_LABEL", "pre-commit.ci autofix"))
     parser.add_argument("--github-token", default=os.getenv("GITHUB_TOKEN"))
     parser.add_argument("--dry-run", action="store_true")
     return parser
+
+
+def _resolve_pr(
+    client: GitHubClient, pr_number: int | None, head_sha: str | None
+) -> tuple[int, dict]:
+    if pr_number is not None:
+        return pr_number, client.get_pr(pr_number)
+
+    if not head_sha:
+        raise GitHubApiError("either PR number or head SHA is required")
+
+    pulls = client.list_pulls_for_commit(head_sha)
+    if not pulls:
+        raise GitHubApiError(f"no pull requests found for commit {head_sha}")
+
+    open_pulls = [pull for pull in pulls if str(pull.get("state", "")).lower() == "open"]
+    chosen = open_pulls[0] if open_pulls else pulls[0]
+    resolved_pr_number = chosen.get("number")
+    if not isinstance(resolved_pr_number, int):
+        raise GitHubApiError(
+            "Unexpected response shape from commit-pulls endpoint: missing numeric PR number"
+        )
+    return resolved_pr_number, chosen
 
 
 def run(argv: list[str] | None = None) -> int:
@@ -50,11 +73,13 @@ def run(argv: list[str] | None = None) -> int:
     if not owner or not repo:
         parser.error("repo owner and repo name are required (args or GITHUB_REPOSITORY)")
 
+    if args.pr_number is None and not args.head_sha:
+        parser.error("either --pr-number or --head-sha is required")
+
     if not args.github_token:
         parser.error("GitHub token required via --github-token or GITHUB_TOKEN")
 
     print(f"Repository: {owner}/{repo}")
-    print(f"PR number: {args.pr_number}")
 
     allowlist = parse_allowlist(args.bot_logins)
     print(f"Configured bot allowlist size: {len(allowlist)}")
@@ -62,15 +87,16 @@ def run(argv: list[str] | None = None) -> int:
     client = GitHubClient(token=args.github_token, owner=owner, repo=repo)
 
     try:
-        pr = client.get_pr(args.pr_number)
+        pr_number, pr = _resolve_pr(client, args.pr_number, args.head_sha)
         author_login = str(pr.get("user", {}).get("login", ""))
         head_sha = args.head_sha or str(pr.get("head", {}).get("sha", ""))
         labels_raw = pr.get("labels")
-        labels = labels_raw if labels_raw is not None else client.list_issue_labels(args.pr_number)
+        labels = labels_raw if labels_raw is not None else client.list_issue_labels(pr_number)
 
         if not head_sha:
             raise GitHubApiError("PR head SHA missing from API response")
 
+        print(f"PR number: {pr_number}")
         check_runs = client.get_check_runs(head_sha)
         statuses = client.get_commit_statuses(head_sha)
 
@@ -98,8 +124,8 @@ def run(argv: list[str] | None = None) -> int:
             print(f"Dry-run enabled; would add label '{args.label}'")
             return 0
 
-        client.add_label(args.pr_number, args.label)
-        print(f"Added label '{args.label}' to PR #{args.pr_number}.")
+        client.add_label(pr_number, args.label)
+        print(f"Added label '{args.label}' to PR #{pr_number}.")
         return 0
     except GitHubApiError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

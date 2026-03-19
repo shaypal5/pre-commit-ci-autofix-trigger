@@ -11,13 +11,27 @@ class DummyClient:
         self.added_labels: list[tuple[int, str]] = []
         self.check_run_refs: list[str] = []
         self.status_refs: list[str] = []
+        self.commit_pull_refs: list[str] = []
 
     def get_pr(self, pr_number: int) -> dict:
         return {
+            "number": pr_number,
             "user": {"login": "copilot"},
             "head": {"sha": "abc123"},
             "labels": [],
         }
+
+    def list_pulls_for_commit(self, ref: str) -> list[dict]:
+        self.commit_pull_refs.append(ref)
+        return [
+            {
+                "number": 77,
+                "state": "open",
+                "user": {"login": "copilot"},
+                "head": {"sha": ref},
+                "labels": [],
+            }
+        ]
 
     def list_issue_labels(self, pr_number: int) -> list[dict]:
         return []
@@ -107,3 +121,33 @@ def test_cli_uses_explicit_head_sha(monkeypatch) -> None:
     assert rc == 0
     assert created["client"].check_run_refs == ["override456"]
     assert created["client"].status_refs == ["override456"]
+
+
+def test_cli_resolves_pr_number_from_head_sha(monkeypatch, capsys) -> None:
+    created: dict[str, DummyClient] = {}
+
+    def _factory(token: str, owner: str, repo: str) -> DummyClient:
+        client = DummyClient(token, owner, repo)
+        created["client"] = client
+        return client
+
+    monkeypatch.setattr(cli, "GitHubClient", _factory)
+    rc = cli.run(
+        [
+            "--repo-owner",
+            "acme",
+            "--repo-name",
+            "demo",
+            "--head-sha",
+            "statussha123",
+            "--github-token",
+            "x",
+            "--dry-run",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "PR number: 77" in out
+    assert created["client"].commit_pull_refs == ["statussha123"]
+    assert created["client"].check_run_refs == ["statussha123"]
+    assert created["client"].status_refs == ["statussha123"]
