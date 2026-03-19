@@ -15,6 +15,10 @@ on:
         description: Repository name (defaults to caller repo)
         required: false
         type: string
+      head_sha:
+        description: Commit SHA to inspect (defaults to current PR head)
+        required: false
+        type: string
       bot_logins:
         description: Comma-separated allowlist of bot logins
         required: false
@@ -73,11 +77,23 @@ jobs:
       - name: Trigger pre-commit.ci autofix label
         env:
           GITHUB_TOKEN: ${{ secrets.github_token || github.token }}
+        shell: bash
         run: |
-          pre-commit-ci-autofix-trigger \
-            --repo-owner "${{ steps.repo.outputs.owner }}" \
-            --repo-name "${{ steps.repo.outputs.name }}" \
-            --pr-number "${{ inputs.pr_number }}" \
-            --bot-logins "${{ inputs.bot_logins }}" \
-            --label "${{ inputs.label }}" \
-            ${{ inputs.dry_run && '--dry-run' || '' }}
+          cmd=(
+            pre-commit-ci-autofix-trigger
+            --repo-owner "${{ steps.repo.outputs.owner }}"
+            --repo-name "${{ steps.repo.outputs.name }}"
+            --pr-number "${{ inputs.pr_number }}"
+            --bot-logins "${{ inputs.bot_logins }}"
+            --label "${{ inputs.label }}"
+          )
+
+          if [ -n "${{ inputs.head_sha }}" ]; then
+            cmd+=(--head-sha "${{ inputs.head_sha }}")
+          fi
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            cmd+=(--dry-run)
+          fi
+
+          "${cmd[@]}"

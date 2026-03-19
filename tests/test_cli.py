@@ -9,6 +9,8 @@ class DummyClient:
         self.owner = owner
         self.repo = repo
         self.added_labels: list[tuple[int, str]] = []
+        self.check_run_refs: list[str] = []
+        self.status_refs: list[str] = []
 
     def get_pr(self, pr_number: int) -> dict:
         return {
@@ -21,9 +23,11 @@ class DummyClient:
         return []
 
     def get_check_runs(self, ref: str) -> list[dict]:
+        self.check_run_refs.append(ref)
         return [{"name": "pre-commit.ci", "conclusion": "failure"}]
 
     def get_commit_statuses(self, ref: str) -> list[dict]:
+        self.status_refs.append(ref)
         return []
 
     def add_label(self, pr_number: int, label: str) -> list[dict]:
@@ -74,3 +78,32 @@ def test_cli_adds_label(monkeypatch) -> None:
     )
     assert rc == 0
     assert created["client"].added_labels == [(33, "pre-commit.ci autofix")]
+
+
+def test_cli_uses_explicit_head_sha(monkeypatch) -> None:
+    created: dict[str, DummyClient] = {}
+
+    def _factory(token: str, owner: str, repo: str) -> DummyClient:
+        client = DummyClient(token, owner, repo)
+        created["client"] = client
+        return client
+
+    monkeypatch.setattr(cli, "GitHubClient", _factory)
+    rc = cli.run(
+        [
+            "--repo-owner",
+            "acme",
+            "--repo-name",
+            "demo",
+            "--pr-number",
+            "44",
+            "--head-sha",
+            "override456",
+            "--github-token",
+            "x",
+            "--dry-run",
+        ]
+    )
+    assert rc == 0
+    assert created["client"].check_run_refs == ["override456"]
+    assert created["client"].status_refs == ["override456"]

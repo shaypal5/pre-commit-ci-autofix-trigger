@@ -31,11 +31,14 @@ Decision logic (idempotent and conservative):
 - No execution of untrusted code from downstream repository.
 - API-only read/write operations against GitHub.
 - Minimal permissions on reusable workflow.
-- Intended to be called from downstream `pull_request_target` workflows.
+- Intended to be called from downstream `pull_request_target` and/or `check_run` workflows.
 
 ## Quickstart for downstream repos
 
-In your downstream repo, add a tiny caller workflow:
+In your downstream repo, add a caller workflow that runs both when the PR changes
+and when `pre-commit.ci` finishes. PR events alone are not enough, because the
+`pre-commit.ci` failure often appears after the initial `opened`/`synchronize`
+workflow has already finished.
 
 ```yaml
 name: pre-commit.ci autofix trigger
@@ -43,6 +46,8 @@ name: pre-commit.ci autofix trigger
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
+  check_run:
+    types: [completed]
 
 permissions:
   pull-requests: write
@@ -52,10 +57,27 @@ permissions:
   contents: read
 
 jobs:
-  trigger:
+  trigger_from_pr:
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      (
+        github.event.pull_request.user.type == 'Bot' ||
+        endsWith(github.event.pull_request.user.login, '[bot]')
+      )
     uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@main
     with:
       pr_number: ${{ github.event.pull_request.number }}
+
+  trigger_from_check_run:
+    if: >-
+      github.event_name == 'check_run' &&
+      contains(github.event.check_run.name, 'pre-commit.ci') &&
+      github.event.check_run.conclusion == 'failure' &&
+      github.event.check_run.pull_requests[0].number != null
+    uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@main
+    with:
+      pr_number: ${{ github.event.check_run.pull_requests[0].number }}
+      head_sha: ${{ github.event.check_run.head_sha }}
 ```
 
 If needed, pass custom allowlist/label and optional token override:
@@ -79,6 +101,7 @@ jobs:
 | `pr_number` | yes | n/a | PR number in the caller repo |
 | `repo_owner` | no | caller owner | Repository owner to query |
 | `repo_name` | no | caller repo name | Repository name to query |
+| `head_sha` | no | current PR head | Commit SHA to inspect instead of re-reading the latest PR head |
 | `bot_logins` | no | `copilot-swe-agent,github-copilot[bot],copilot,claude[bot],claude,chatgpt,openai` | Comma-separated bot allowlist |
 | `label` | no | `pre-commit.ci autofix` | Label to apply |
 | `dry_run` | no | `false` | Log decision only, no mutation |
