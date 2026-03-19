@@ -151,3 +151,89 @@ def test_cli_resolves_pr_number_from_head_sha(monkeypatch, capsys) -> None:
     assert created["client"].commit_pull_refs == ["statussha123"]
     assert created["client"].check_run_refs == ["statussha123"]
     assert created["client"].status_refs == ["statussha123"]
+
+
+def test_cli_prefers_open_pr_with_matching_head_sha(monkeypatch, capsys) -> None:
+    created: dict[str, DummyClient] = {}
+
+    class MatchingDummyClient(DummyClient):
+        def list_pulls_for_commit(self, ref: str) -> list[dict]:
+            self.commit_pull_refs.append(ref)
+            return [
+                {
+                    "number": 70,
+                    "state": "open",
+                    "user": {"login": "copilot"},
+                    "head": {"sha": "different"},
+                    "labels": [],
+                },
+                {
+                    "number": 71,
+                    "state": "open",
+                    "user": {"login": "copilot"},
+                    "head": {"sha": ref},
+                    "labels": [],
+                },
+            ]
+
+    def _factory(token: str, owner: str, repo: str) -> MatchingDummyClient:
+        client = MatchingDummyClient(token, owner, repo)
+        created["client"] = client
+        return client
+
+    monkeypatch.setattr(cli, "GitHubClient", _factory)
+    rc = cli.run(
+        [
+            "--repo-owner",
+            "acme",
+            "--repo-name",
+            "demo",
+            "--head-sha",
+            "statussha123",
+            "--github-token",
+            "x",
+            "--dry-run",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "PR number: 71" in out
+
+
+def test_cli_errors_when_multiple_open_prs_remain(monkeypatch, capsys) -> None:
+    class AmbiguousDummyClient(DummyClient):
+        def list_pulls_for_commit(self, ref: str) -> list[dict]:
+            self.commit_pull_refs.append(ref)
+            return [
+                {
+                    "number": 70,
+                    "state": "open",
+                    "user": {"login": "copilot"},
+                    "head": {"sha": "different-a"},
+                    "labels": [],
+                },
+                {
+                    "number": 71,
+                    "state": "open",
+                    "user": {"login": "copilot"},
+                    "head": {"sha": "different-b"},
+                    "labels": [],
+                },
+            ]
+
+    monkeypatch.setattr(cli, "GitHubClient", AmbiguousDummyClient)
+    rc = cli.run(
+        [
+            "--repo-owner",
+            "acme",
+            "--repo-name",
+            "demo",
+            "--head-sha",
+            "statussha123",
+            "--github-token",
+            "x",
+        ]
+    )
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "multiple open pull requests found" in err

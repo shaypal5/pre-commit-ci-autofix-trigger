@@ -48,8 +48,26 @@ def _resolve_pr(
     if not pulls:
         raise GitHubApiError(f"no pull requests found for commit {head_sha}")
 
-    open_pulls = [pull for pull in pulls if str(pull.get("state", "")).lower() == "open"]
-    chosen = open_pulls[0] if open_pulls else pulls[0]
+    exact_open_matches = [
+        pull
+        for pull in pulls
+        if str(pull.get("state", "")).lower() == "open"
+        and str(pull.get("head", {}).get("sha", "")) == head_sha
+    ]
+    if len(exact_open_matches) > 1:
+        raise GitHubApiError(
+            f"multiple open pull requests found for commit {head_sha}; please pass --pr-number"
+        )
+    if exact_open_matches:
+        chosen = exact_open_matches[0]
+    else:
+        open_pulls = [pull for pull in pulls if str(pull.get("state", "")).lower() == "open"]
+        if len(open_pulls) > 1:
+            raise GitHubApiError(
+                f"multiple open pull requests found for commit {head_sha}; please pass --pr-number"
+            )
+        chosen = open_pulls[0] if open_pulls else pulls[0]
+
     resolved_pr_number = chosen.get("number")
     if not isinstance(resolved_pr_number, int):
         raise GitHubApiError(
