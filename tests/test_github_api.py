@@ -92,6 +92,23 @@ class TestListIssueLabels:
                 client.list_issue_labels(1)
 
 
+class TestListPullsForCommit:
+    def test_returns_list(self):
+        client = _make_client()
+        data = [{"number": 123}]
+        resp = _mock_response(status_code=200, content=b"[...]", json_data=data)
+        with patch("requests.request", return_value=resp):
+            result = client.list_pulls_for_commit("abc123")
+        assert result == data
+
+    def test_non_list_response_raises(self):
+        client = _make_client()
+        resp = _mock_response(status_code=200, content=b"{}", json_data={"unexpected": "dict"})
+        with patch("requests.request", return_value=resp):
+            with pytest.raises(GitHubApiError, match="expected list"):
+                client.list_pulls_for_commit("abc123")
+
+
 class TestGetCheckRuns:
     def test_returns_check_runs(self):
         client = _make_client()
