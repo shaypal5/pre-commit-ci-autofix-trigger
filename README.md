@@ -33,6 +33,18 @@ Decision logic (idempotent and conservative):
 - Minimal permissions on reusable workflow.
 - Intended to be called from downstream `pull_request_target`, `status`, and/or `check_run` workflows.
 
+## PR agent context integration
+
+This repository self-consumes [`shaypal5/pr-agent-context`](https://github.com/shaypal5/pr-agent-context)
+on pull requests.
+
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) uploads a combined `coverage.xml` artifact and
+  invokes `pr-agent-context` in `coverage_xml_artifact` mode.
+- [`.github/workflows/pr-agent-context-refresh.yml`](.github/workflows/pr-agent-context-refresh.yml)
+  handles follow-up refreshes after reviews and external check completion.
+- The refresh flow reuses coverage from the `CI` workflow with scoped comment updates and suppresses
+  no-op all-clear refresh comments.
+
 ## Quickstart for downstream repos
 
 Prefer pinning this reusable workflow to a released version such as `@v1.0.0`
@@ -159,7 +171,7 @@ The tool uses `POST /issues/{issue_number}/labels`. If a label name does not alr
 ```bash
 python -m pip install -e .[dev]
 ruff check .
-pytest
+pytest --cov=src/pre_commit_ci_autofix_trigger --cov-branch --cov-report=xml --cov-report=term
 ```
 
 ## Maintainer release flow
