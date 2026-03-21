@@ -88,7 +88,7 @@ jobs:
       bot_logins: copilot-swe-agent,github-copilot[bot],claude[bot]
       label: pre-commit.ci autofix
     secrets:
-      github_token: ${{ secrets.GITHUB_TOKEN }}
+      access_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ## Reusable workflow inputs
@@ -105,7 +105,7 @@ jobs:
 
 Secret:
 
-- `github_token` (optional). If omitted, defaults to `${{ github.token }}`.
+- `access_token` (optional). If omitted, defaults to `${{ github.token }}`.
 
 ## Local CLI usage
 

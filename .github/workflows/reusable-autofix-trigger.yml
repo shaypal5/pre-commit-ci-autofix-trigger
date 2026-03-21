@@ -35,7 +35,7 @@ on:
         default: false
         type: boolean
     secrets:
-      github_token:
+      access_token:
         required: false
 
 permissions:
@@ -76,7 +76,7 @@ jobs:
 
       - name: Trigger pre-commit.ci autofix label
         env:
-          GITHUB_TOKEN: ${{ secrets.github_token || github.token }}
+          GITHUB_TOKEN: ${{ secrets.access_token || github.token }}
         shell: bash
         run: |
           cmd=(
