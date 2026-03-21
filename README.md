@@ -172,7 +172,7 @@ workflow:
 - creates a matching tag such as `v1.0.0` on the pushed `main` commit if missing
 - creates a GitHub release for that tag
 
-`.github/workflows/release-tags.yml` runs when a concrete release tag such as
+`.github/workflows/release-tags.yml` runs when a concrete `vX.Y.Z` tag such as
 `v1.0.0` is pushed. It force-updates the matching major tag (`v1`) to the same
 commit, so downstream repositories pinned to `@v1` receive later compatible
 minor and patch releases automatically.
