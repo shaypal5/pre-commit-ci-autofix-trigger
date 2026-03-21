@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pre_commit_ci_autofix_trigger import cli
+from pre_commit_ci_autofix_trigger.github_api import GitHubApiError
 
 
 class DummyClient:
@@ -237,3 +238,54 @@ def test_cli_errors_when_multiple_open_prs_remain(monkeypatch, capsys) -> None:
     err = capsys.readouterr().err
     assert rc == 1
     assert "multiple open pull requests found" in err
+
+
+def test_cli_treats_label_permission_error_as_nonfatal(monkeypatch, capsys) -> None:
+    class PermissionDeniedClient(DummyClient):
+        def add_label(self, pr_number: int, label: str) -> list[dict]:
+            raise GitHubApiError(
+                'GitHub API POST /repos/acme/demo/issues/33/labels failed: 403 '
+                '{"message":"Resource not accessible by integration"}'
+            )
+
+    monkeypatch.setattr(cli, "GitHubClient", PermissionDeniedClient)
+    rc = cli.run(
+        [
+            "--repo-owner",
+            "acme",
+            "--repo-name",
+            "demo",
+            "--pr-number",
+            "33",
+            "--github-token",
+            "x",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "WARNING: unable to add the autofix label" in out
+
+
+def test_cli_still_fails_for_other_label_errors(monkeypatch, capsys) -> None:
+    class OtherLabelErrorClient(DummyClient):
+        def add_label(self, pr_number: int, label: str) -> list[dict]:
+            raise GitHubApiError(
+                "GitHub API POST /repos/acme/demo/issues/33/labels failed: 500 Server Error"
+            )
+
+    monkeypatch.setattr(cli, "GitHubClient", OtherLabelErrorClient)
+    rc = cli.run(
+        [
+            "--repo-owner",
+            "acme",
+            "--repo-name",
+            "demo",
+            "--pr-number",
+            "33",
+            "--github-token",
+            "x",
+        ]
+    )
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "500 Server Error" in err

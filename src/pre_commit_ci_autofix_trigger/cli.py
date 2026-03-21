@@ -76,6 +76,17 @@ def _resolve_pr(
     return resolved_pr_number, chosen
 
 
+def _is_label_permission_error(exc: GitHubApiError) -> bool:
+    message = str(exc).lower()
+    return (
+        "post /repos/" in message
+        and "/issues/" in message
+        and "/labels" in message
+        and "403" in message
+        and "resource not accessible by integration" in message
+    )
+
+
 def run(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -142,7 +153,18 @@ def run(argv: list[str] | None = None) -> int:
             print(f"Dry-run enabled; would add label '{args.label}'")
             return 0
 
-        client.add_label(pr_number, args.label)
+        try:
+            client.add_label(pr_number, args.label)
+        except GitHubApiError as exc:
+            if not _is_label_permission_error(exc):
+                raise
+            print(
+                "WARNING: unable to add the autofix label because the workflow token "
+                "cannot write labels for this PR. Pass a stronger token via the "
+                "reusable workflow access_token secret to enable labeling."
+            )
+            return 0
+
         print(f"Added label '{args.label}' to PR #{pr_number}.")
         return 0
     except GitHubApiError as exc:
