@@ -22,15 +22,21 @@ jobs:
         id: version
         run: |
           version=$(python - <<'PY'
+          import re
           import tomllib
           from pathlib import Path
 
           data = tomllib.loads(Path("pyproject.toml").read_text())
-          print(data["project"]["version"])
+          version = data["project"]["version"]
+          if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+              raise SystemExit(f"Unsupported release version: {version}")
+          print(version)
           PY
           )
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Check whether tag already exists
         id: tag_check
@@ -39,10 +45,15 @@ jobs:
           REPO: ${{ github.repository }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          if gh api "repos/$REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
+          status=$(gh api -i "repos/$REPO/git/ref/tags/$TAG" 2>/dev/null | head -n 1 | cut -d' ' -f2)
+
+          if [ "$status" = "200" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
+          elif [ "$status" = "404" ]; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unexpected response while checking tag existence: ${status:-unknown}" >&2
+            exit 1
           fi
 
       - name: Create tag on pushed main commit

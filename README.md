@@ -157,8 +157,9 @@ pytest
 
 ## Maintainer release flow
 
-Merging a PR that bumps the package version on `main` triggers
-`.github/workflows/release.yml`. That workflow:
+`.github/workflows/release.yml` runs on every push to `main`. When the pushed
+commit's version in `pyproject.toml` does not already have a matching tag, the
+workflow:
 
 - reads the version from `pyproject.toml`
 - creates a matching tag such as `v1.0.0` on the pushed `main` commit if missing
