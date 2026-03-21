@@ -43,7 +43,7 @@ Versioning guidance:
 - use `@v1` in downstream repositories for the stable major line
 - use fixed tags such as `@v1.0.0` when you want exact version pinning
 - this repository automatically moves the matching major tag when a new
-  `v1.x.y` release is published
+  concrete `v1.x.y` release tag is created
 
 In your downstream repo, add a caller workflow that runs both when the PR changes
 and when `pre-commit.ci` publishes a failing result. PR events alone are not
@@ -171,8 +171,8 @@ workflow:
 - reads the version from `pyproject.toml`
 - creates a matching tag such as `v1.0.0` on the pushed `main` commit if missing
 - creates a GitHub release for that tag
+- force-updates the matching major tag (`v1`) to the same commit
 
-`.github/workflows/release-tags.yml` runs when a concrete `vX.Y.Z` tag such as
-`v1.0.0` is pushed. It force-updates the matching major tag (`v1`) to the same
-commit, so downstream repositories pinned to `@v1` receive later compatible
-minor and patch releases automatically.
+The major tag move happens inside the same workflow as concrete release
+creation. That avoids relying on a second workflow being triggered by a tag
+that was itself created via `GITHUB_TOKEN`.

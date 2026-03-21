@@ -33,9 +33,11 @@ jobs:
           print(version)
           PY
           )
+          major="${version%%.*}"
           {
             echo "version=$version"
             echo "tag=v$version"
+            echo "major_tag=v$major"
           } >> "$GITHUB_OUTPUT"
 
       - name: Check whether tag already exists
@@ -76,3 +78,15 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           SHA: ${{ github.sha }}
         run: gh release create "$TAG" --target "$SHA" --generate-notes --title "$TAG"
+
+      - name: Move matching major tag
+        if: steps.tag_check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAJOR_TAG: ${{ steps.version.outputs.major_tag }}
+          SHA: ${{ github.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "$MAJOR_TAG" "$SHA"
+          git push origin "refs/tags/$MAJOR_TAG" --force
