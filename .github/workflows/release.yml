@@ -33,9 +33,11 @@ jobs:
           print(version)
           PY
           )
+          major="${version%%.*}"
           {
             echo "version=$version"
             echo "tag=v$version"
+            echo "major_tag=v$major"
           } >> "$GITHUB_OUTPUT"
 
       - name: Check whether tag already exists
@@ -49,8 +51,11 @@ jobs:
 
           if [ "$status" = "200" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
+            tag_sha=$(gh api "repos/$REPO/git/ref/tags/$TAG" --jq .object.sha)
+            echo "tag_sha=$tag_sha" >> "$GITHUB_OUTPUT"
           elif [ "$status" = "404" ]; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "tag_sha=" >> "$GITHUB_OUTPUT"
           else
             echo "Unexpected response while checking tag existence: ${status:-unknown}" >&2
             exit 1
@@ -76,3 +81,14 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           SHA: ${{ github.sha }}
         run: gh release create "$TAG" --target "$SHA" --generate-notes --title "$TAG"
+
+      - name: Move matching major tag
+        if: steps.tag_check.outputs.exists == 'false' || steps.tag_check.outputs.tag_sha == github.sha
+        env:
+          MAJOR_TAG: ${{ steps.version.outputs.major_tag }}
+          SHA: ${{ github.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "$MAJOR_TAG" "$SHA"
+          git push origin "refs/tags/$MAJOR_TAG" --force
