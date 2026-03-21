@@ -53,7 +53,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: shaypal5/pre-commit-ci-autofix-trigger
-          ref: ${{ github.workflow_sha }}
+          # In reusable workflows, the github context comes from the caller repo,
+          # so github.workflow_sha points at the caller commit, not this repo.
+          ref: v1
 
       - name: Set up Python
         uses: actions/setup-python@v5
