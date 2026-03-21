@@ -244,7 +244,7 @@ def test_cli_treats_label_permission_error_as_nonfatal(monkeypatch, capsys) -> N
     class PermissionDeniedClient(DummyClient):
         def add_label(self, pr_number: int, label: str) -> list[dict]:
             raise GitHubApiError(
-                'GitHub API POST /repos/acme/demo/issues/33/labels failed: 403 '
+                "GitHub API POST /repos/acme/demo/issues/33/labels failed: 403 "
                 '{"message":"Resource not accessible by integration"}'
             )
 
