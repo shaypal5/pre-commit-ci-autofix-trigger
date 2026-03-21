@@ -35,6 +35,9 @@ Decision logic (idempotent and conservative):
 
 ## Quickstart for downstream repos
 
+Prefer pinning this reusable workflow to a released version such as `@v1.0.0`
+instead of `@main` or an ad hoc commit SHA from an unmerged branch.
+
 In your downstream repo, add a caller workflow that runs both when the PR changes
 and when `pre-commit.ci` publishes a failing result. PR events alone are not
 enough, because the `pre-commit.ci` failure often appears after the initial
@@ -63,7 +66,7 @@ jobs:
         github.event.pull_request.user.type == 'Bot' ||
         endsWith(github.event.pull_request.user.login, '[bot]')
       )
-    uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@main
+    uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@v1.0.0
     with:
       pr_number: ${{ github.event.pull_request.number }}
 
@@ -72,7 +75,7 @@ jobs:
       github.event_name == 'status' &&
       github.event.context == 'pre-commit.ci - pr' &&
       github.event.state == 'failure'
-    uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@main
+    uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@v1.0.0
     with:
       head_sha: ${{ github.event.sha }}
 ```
@@ -82,7 +85,7 @@ If needed, pass custom allowlist/label and optional token override:
 ```yaml
 jobs:
   trigger:
-    uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@main
+    uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@v1.0.0
     with:
       pr_number: ${{ github.event.pull_request.number }}
       bot_logins: copilot-swe-agent,github-copilot[bot],claude[bot]
@@ -137,7 +140,7 @@ Optional flags:
 
 The tool uses `POST /issues/{issue_number}/labels`. If a label name does not already exist, GitHub may create it implicitly depending on repository settings and token permissions. If GitHub rejects the request, the CLI surfaces a clear error.
 
-## Limitations (v0)
+## Current limitations
 
 - Label mode only (no comment mode).
 - Runs only when invoked by downstream workflow.
@@ -151,3 +154,12 @@ python -m pip install -e .[dev]
 ruff check .
 pytest
 ```
+
+## Maintainer release flow
+
+Merging a PR that bumps the package version on `main` triggers
+`.github/workflows/release.yml`. That workflow:
+
+- reads the version from `pyproject.toml`
+- creates a matching tag such as `v1.0.0` on the pushed `main` commit if missing
+- creates a GitHub release for that tag
