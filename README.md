@@ -38,6 +38,13 @@ Decision logic (idempotent and conservative):
 Prefer pinning this reusable workflow to a released version such as `@v1.0.0`
 instead of `@main` or an ad hoc commit SHA from an unmerged branch.
 
+Versioning guidance:
+
+- use `@v1` in downstream repositories for the stable major line
+- use fixed tags such as `@v1.0.0` when you want exact version pinning
+- this repository automatically moves the matching major tag when a new
+  `v1.x.y` release is published
+
 In your downstream repo, add a caller workflow that runs both when the PR changes
 and when `pre-commit.ci` publishes a failing result. PR events alone are not
 enough, because the `pre-commit.ci` failure often appears after the initial
@@ -164,3 +171,8 @@ workflow:
 - reads the version from `pyproject.toml`
 - creates a matching tag such as `v1.0.0` on the pushed `main` commit if missing
 - creates a GitHub release for that tag
+
+`.github/workflows/release-tags.yml` runs when a concrete `vX.Y.Z` tag such as
+`v1.0.0` is pushed. It force-updates the matching major tag (`v1`) to the same
+commit, so downstream repositories pinned to `@v1` receive later compatible
+minor and patch releases automatically.
