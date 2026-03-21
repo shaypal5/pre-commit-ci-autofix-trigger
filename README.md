@@ -56,6 +56,9 @@ Versioning guidance:
 - use fixed tags such as `@v1.0.0` when you want exact version pinning
 - this repository automatically moves the matching major tag when a new
   concrete `v1.x.y` release tag is created
+- when pinning the reusable workflow to an exact tag, also pass
+  `checkout_ref` with the same tag so the internal checkout uses the same
+  released version
 
 In your downstream repo, add a caller workflow that runs both when the PR changes
 and when `pre-commit.ci` publishes a failing result. PR events alone are not
@@ -87,6 +90,7 @@ jobs:
       )
     uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@v1.0.0
     with:
+      checkout_ref: v1.0.0
       pr_number: ${{ github.event.pull_request.number }}
 
   trigger_from_status:
@@ -96,6 +100,7 @@ jobs:
       github.event.state == 'failure'
     uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@v1.0.0
     with:
+      checkout_ref: v1.0.0
       head_sha: ${{ github.event.sha }}
 ```
 
@@ -106,6 +111,7 @@ jobs:
   trigger:
     uses: your-org/pre-commit-ci-autofix-trigger/.github/workflows/reusable-autofix-trigger.yml@v1.0.0
     with:
+      checkout_ref: v1.0.0
       pr_number: ${{ github.event.pull_request.number }}
       bot_logins: copilot-swe-agent,github-copilot[bot],claude[bot]
       label: pre-commit.ci autofix
@@ -120,6 +126,7 @@ jobs:
 | `pr_number` | no | resolved from `head_sha` when omitted | PR number in the caller repo |
 | `repo_owner` | no | caller owner | Repository owner to query |
 | `repo_name` | no | caller repo name | Repository name to query |
+| `checkout_ref` | no | `v1` | Internal checkout ref for `shaypal5/pre-commit-ci-autofix-trigger`; set this to the same exact tag as the reusable workflow when you need fully pinned behavior |
 | `head_sha` | no | current PR head, or used to resolve the PR when `pr_number` is omitted | Commit SHA to inspect instead of re-reading the latest PR head |
 | `bot_logins` | no | `copilot-swe-agent,github-copilot[bot],copilot,claude[bot],claude,chatgpt,openai` | Comma-separated bot allowlist |
 | `label` | no | `pre-commit.ci autofix` | Label to apply |

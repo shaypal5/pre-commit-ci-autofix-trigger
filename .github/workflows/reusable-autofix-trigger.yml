@@ -15,6 +15,11 @@ on:
         description: Repository name (defaults to caller repo)
         required: false
         type: string
+      checkout_ref:
+        description: Ref of shaypal5/pre-commit-ci-autofix-trigger to check out internally
+        required: false
+        default: v1
+        type: string
       head_sha:
         description: Commit SHA to inspect (defaults to current PR head)
         required: false
@@ -55,7 +60,7 @@ jobs:
           repository: shaypal5/pre-commit-ci-autofix-trigger
           # In reusable workflows, the github context comes from the caller repo,
           # so github.workflow_sha points at the caller commit, not this repo.
-          ref: v1
+          ref: ${{ inputs.checkout_ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
