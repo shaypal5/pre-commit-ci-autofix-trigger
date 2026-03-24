@@ -119,6 +119,18 @@ jobs:
       access_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+If you use a fine-grained personal access token for `access_token`, the
+working permission set for PR labeling is:
+
+- `Issues`: Read and write
+- `Pull requests`: Read and write
+- `Metadata`: Read-only
+
+In practice, `Issues: Read and write` alone can still produce
+`403 Resource not accessible by personal access token` for the label-write
+endpoint. If you do not need an override token, prefer the default
+`${{ github.token }}`.
+
 ## Reusable workflow inputs
 
 | Input | Required | Default | Description |
@@ -135,6 +147,9 @@ jobs:
 Secret:
 
 - `access_token` (optional). If omitted, defaults to `${{ github.token }}`.
+- For fine-grained PATs used as `access_token`, grant:
+  `Issues: Read and write`, `Pull requests: Read and write`, and
+  `Metadata: Read-only`.
 
 ## Local CLI usage
 
@@ -164,7 +179,19 @@ Optional flags:
 
 ### Label creation behavior
 
-The tool uses `POST /issues/{issue_number}/labels`. If a label name does not already exist, GitHub may create it implicitly depending on repository settings and token permissions. If GitHub rejects the request, the CLI surfaces a clear error.
+The tool uses `POST /issues/{issue_number}/labels`. If a label name does not
+already exist, GitHub may create it implicitly depending on repository settings
+and token permissions.
+
+For override tokens, the required permissions are not purely theoretical. A
+fine-grained PAT was observed to succeed only when it had all of:
+
+- `Issues`: Read and write
+- `Pull requests`: Read and write
+- `Metadata`: Read-only
+
+If GitHub rejects the request, the CLI surfaces a clear error or warning,
+depending on the failure mode.
 
 ## Current limitations
 
