@@ -92,6 +92,27 @@ class TestListIssueLabels:
                 client.list_issue_labels(1)
 
 
+class TestListIssueComments:
+    def test_returns_paginated_comments(self):
+        client = _make_client()
+        first_page = [{"id": index, "body": "comment"} for index in range(100)]
+        second_page = [{"id": 101, "body": "last"}]
+        responses = [
+            _mock_response(status_code=200, content=b"[...]", json_data=first_page),
+            _mock_response(status_code=200, content=b"[...]", json_data=second_page),
+        ]
+        with patch("requests.request", side_effect=responses):
+            result = client.list_issue_comments(1)
+        assert result == first_page + second_page
+
+    def test_non_list_response_raises(self):
+        client = _make_client()
+        resp = _mock_response(status_code=200, content=b"{}", json_data={"unexpected": "dict"})
+        with patch("requests.request", return_value=resp):
+            with pytest.raises(GitHubApiError, match="expected list"):
+                client.list_issue_comments(1)
+
+
 class TestListPullsForCommit:
     def test_returns_list(self):
         client = _make_client()
@@ -172,3 +193,37 @@ class TestAddLabel:
         with patch("requests.request", return_value=resp):
             with pytest.raises(GitHubApiError, match="expected list"):
                 client.add_label(1, "pre-commit.ci autofix")
+
+
+class TestCreateIssueComment:
+    def test_returns_dict(self):
+        client = _make_client()
+        data = {"id": 123, "body": "<!-- marker -->"}
+        resp = _mock_response(status_code=201, content=b"{...}", json_data=data)
+        with patch("requests.request", return_value=resp):
+            result = client.create_issue_comment(1, "<!-- marker -->")
+        assert result == data
+
+    def test_non_dict_response_raises(self):
+        client = _make_client()
+        resp = _mock_response(status_code=200, content=b"[]", json_data=[])
+        with patch("requests.request", return_value=resp):
+            with pytest.raises(GitHubApiError, match="expected dict"):
+                client.create_issue_comment(1, "<!-- marker -->")
+
+
+class TestUpdateIssueComment:
+    def test_returns_dict(self):
+        client = _make_client()
+        data = {"id": 123, "body": "state"}
+        resp = _mock_response(status_code=200, content=b"{...}", json_data=data)
+        with patch("requests.request", return_value=resp):
+            result = client.update_issue_comment(123, "state")
+        assert result == data
+
+    def test_non_dict_response_raises(self):
+        client = _make_client()
+        resp = _mock_response(status_code=200, content=b"[]", json_data=[])
+        with patch("requests.request", return_value=resp):
+            with pytest.raises(GitHubApiError, match="expected dict"):
+                client.update_issue_comment(123, "state")

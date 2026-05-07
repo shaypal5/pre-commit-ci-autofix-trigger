@@ -4,6 +4,13 @@ import argparse
 import os
 import sys
 
+from pre_commit_ci_autofix_trigger.attempts import (
+    append_attempt,
+    attempts_for_head,
+    build_attempt_state_body,
+    load_attempt_state,
+    new_attempt,
+)
 from pre_commit_ci_autofix_trigger.github_api import GitHubApiError, GitHubClient
 from pre_commit_ci_autofix_trigger.logic import decide_autofix, parse_allowlist
 
@@ -30,6 +37,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--head-sha")
     parser.add_argument("--bot-logins", default=os.getenv("BOT_LOGINS", DEFAULT_BOT_LOGINS))
     parser.add_argument("--label", default=os.getenv("AUTOFIX_LABEL", "pre-commit.ci autofix"))
+    parser.add_argument(
+        "--max-attempts-per-head-sha",
+        default=os.getenv("MAX_ATTEMPTS_PER_HEAD_SHA", "2"),
+    )
     parser.add_argument("--github-token", default=os.getenv("GITHUB_TOKEN"))
     parser.add_argument("--dry-run", action="store_true")
     return parser
@@ -108,6 +119,13 @@ def run(argv: list[str] | None = None) -> int:
     if not args.github_token:
         parser.error("GitHub token required via --github-token or GITHUB_TOKEN")
 
+    try:
+        max_attempts = int(args.max_attempts_per_head_sha)
+    except ValueError:
+        parser.error("--max-attempts-per-head-sha must be an integer")
+    if max_attempts < 1:
+        parser.error("--max-attempts-per-head-sha must be at least 1")
+
     print(f"Repository: {owner}/{repo}")
 
     allowlist = parse_allowlist(args.bot_logins)
@@ -152,6 +170,62 @@ def run(argv: list[str] | None = None) -> int:
         if args.dry_run:
             print(f"Dry-run enabled; would add label '{args.label}'")
             return 0
+
+        try:
+            comments = client.list_issue_comments(pr_number)
+        except GitHubApiError as exc:
+            print(f"ERROR: unable to read autofix attempt state: {exc}", file=sys.stderr)
+            return 1
+
+        state = load_attempt_state(comments)
+        attempts = attempts_for_head(state, head_sha=head_sha)
+        print(f"Autofix attempts for this PR head SHA: {len(attempts)}/{max_attempts}")
+        if len(attempts) >= max_attempts:
+            print("Attempt limit reached for this PR head SHA; no action required.")
+            return 0
+
+        claimed_state = append_attempt(
+            state,
+            new_attempt(
+                head_sha=head_sha,
+                run_id=os.getenv("GITHUB_RUN_ID"),
+                run_attempt=os.getenv("GITHUB_RUN_ATTEMPT"),
+            ),
+        )
+        state_body = build_attempt_state_body(claimed_state)
+        try:
+            if state.comment_id is None:
+                claim = client.create_issue_comment(pr_number, state_body)
+            else:
+                claim = client.update_issue_comment(state.comment_id, state_body)
+            claim_id = int(claim["id"])
+        except (KeyError, TypeError, ValueError) as exc:
+            print(
+                f"ERROR: unable to identify saved autofix attempt state: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+        except GitHubApiError as exc:
+            print(f"ERROR: unable to write autofix attempt state: {exc}", file=sys.stderr)
+            return 1
+
+        try:
+            comments_after_claim = client.list_issue_comments(pr_number)
+        except GitHubApiError as exc:
+            print(f"ERROR: unable to verify autofix attempt state: {exc}", file=sys.stderr)
+            return 1
+
+        verified_state = load_attempt_state(comments_after_claim)
+        if verified_state.comment_id != claim_id:
+            print("ERROR: saved autofix attempt state was not visible on re-read", file=sys.stderr)
+            return 1
+        verified_attempts = attempts_for_head(verified_state, head_sha=head_sha)
+        print(f"Autofix attempts after claim: {len(verified_attempts)}/{max_attempts}")
+        # The reusable workflow serializes by target repo and head SHA. This
+        # duplicate post-write check is a defense-in-depth guard for direct CLI use.
+        if len(attempts) + 1 != len(verified_attempts):
+            print("ERROR: concurrent autofix attempt state change detected", file=sys.stderr)
+            return 1
 
         try:
             client.add_label(pr_number, args.label)

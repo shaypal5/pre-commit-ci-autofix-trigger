@@ -34,6 +34,11 @@ on:
         required: false
         default: pre-commit.ci autofix
         type: string
+      max_attempts_per_head_sha:
+        description: Maximum autofix label applications allowed per PR head commit
+        required: false
+        default: 2
+        type: number
       dry_run:
         description: If true, logs decision without mutating labels
         required: false
@@ -53,6 +58,9 @@ permissions:
 jobs:
   trigger:
     runs-on: ubuntu-latest
+    concurrency:
+      group: pre-commit-ci-autofix-trigger-${{ github.repository }}-${{ inputs.repo_owner || github.repository_owner }}-${{ inputs.repo_name || github.event.repository.name }}-${{ inputs.head_sha || github.event.pull_request.head.sha || github.event.sha || github.run_id }}
+      cancel-in-progress: false
     steps:
       - name: Check out workflow repository
         uses: actions/checkout@v4
@@ -92,6 +100,7 @@ jobs:
             --repo-name "${{ steps.repo.outputs.name }}"
             --bot-logins "${{ inputs.bot_logins }}"
             --label "${{ inputs.label }}"
+            --max-attempts-per-head-sha "${{ inputs.max_attempts_per_head_sha }}"
           )
 
           if [ "${{ inputs.pr_number }}" != "" ] && [ "${{ inputs.pr_number }}" != "0" ]; then

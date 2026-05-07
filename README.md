@@ -11,7 +11,8 @@ This project keeps your existing `pre-commit.ci` setup unchanged and adds a mini
 1. Reads PR metadata and CI status via GitHub API.
 2. Checks whether PR author is in a configurable bot allowlist.
 3. Detects failing `pre-commit.ci` signals (check runs and commit statuses).
-4. Adds `pre-commit.ci autofix` label when appropriate.
+4. Claims a durable per-commit autofix attempt.
+5. Adds `pre-commit.ci autofix` label when appropriate.
 
 ## How it works
 
@@ -21,9 +22,14 @@ Decision logic (idempotent and conservative):
 - **Skip** if label already exists.
 - **Skip** if no `pre-commit.ci` checks/statuses are visible.
 - **Skip** if `pre-commit.ci` is present and passing.
-- **Add label** if allowlisted bot author + `pre-commit.ci` failure + label missing.
+- **Skip** if the PR head commit already has the configured maximum number of autofix attempts.
+- **Add label** if allowlisted bot author + `pre-commit.ci` failure + label missing + the managed attempt state stays within the per-head-SHA limit.
 
 `pre-commit.ci` detection is based on names/contexts containing `pre-commit.ci`.
+Attempt tracking uses one managed PR issue comment, so it remains durable even when
+`pre-commit.ci` removes the autofix label after consuming it.
+The reusable workflow also serializes runs by target repository and head SHA, so
+parallel `status` events cannot race past the attempt limit.
 
 ## Safety model
 
@@ -31,6 +37,7 @@ Decision logic (idempotent and conservative):
 - No execution of untrusted code from downstream repository.
 - API-only read/write operations against GitHub.
 - Minimal permissions on reusable workflow.
+- Workflow-level concurrency serializes attempts for each target PR head commit.
 - Intended to be called from downstream `pull_request_target`, `status`, and/or `check_run` workflows.
 
 ## PR agent context integration
@@ -92,6 +99,7 @@ jobs:
     with:
       checkout_ref: v1.0.0
       pr_number: ${{ github.event.pull_request.number }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
 
   trigger_from_status:
     if: >-
@@ -119,8 +127,8 @@ jobs:
       access_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-If you use a fine-grained personal access token for `access_token`, the
-working permission set for PR labeling is:
+If you use a fine-grained personal access token for `access_token`, the working
+permission set for PR labeling and the managed attempt-state comment is:
 
 - `Issues`: Read and write
 - `Pull requests`: Read and write
@@ -142,6 +150,7 @@ endpoint. If you do not need an override token, prefer the default
 | `head_sha` | no | current PR head, or used to resolve the PR when `pr_number` is omitted | Commit SHA to inspect instead of re-reading the latest PR head |
 | `bot_logins` | no | `copilot-swe-agent,github-copilot[bot],copilot,claude[bot],claude,chatgpt,openai` | Comma-separated bot allowlist |
 | `label` | no | `pre-commit.ci autofix` | Label to apply |
+| `max_attempts_per_head_sha` | no | `2` | Maximum autofix label applications allowed per PR head commit |
 | `dry_run` | no | `false` | Log decision only, no mutation |
 
 Secret:
@@ -169,6 +178,7 @@ Optional flags:
 - `--head-sha` (otherwise derived from PR)
 - `--bot-logins` (comma-separated allowlist)
 - `--label` (default `pre-commit.ci autofix`)
+- `--max-attempts-per-head-sha` (default `2`)
 - `--dry-run`
 
 ## Idempotency and expected behavior
@@ -176,12 +186,19 @@ Optional flags:
 - Re-running on same PR is safe.
 - If label already exists, tool exits successfully with no changes.
 - If pre-commit.ci signal is not found, tool does nothing.
+- If the PR head commit already has the configured maximum number of recorded
+  autofix attempts, tool exits successfully with no changes.
+- If attempt state cannot be read or written, tool fails closed and does not add
+  the label.
+- If label writing fails after an attempt is recorded, that record still consumes
+  an attempt for the PR head commit.
 
 ### Label creation behavior
 
-The tool uses `POST /issues/{issue_number}/labels`. If a label name does not
-already exist, GitHub may create it implicitly depending on repository settings
-and token permissions.
+The tool uses one managed issue comment for durable attempt state and
+`POST /issues/{issue_number}/labels` for the autofix trigger. If a label name
+does not already exist, GitHub may create it implicitly depending on repository
+settings and token permissions.
 
 For override tokens, the required permissions are not purely theoretical. A
 fine-grained PAT was observed to succeed only when it had all of:
@@ -195,10 +212,10 @@ depending on the failure mode.
 
 ## Current limitations
 
-- Label mode only (no comment mode).
+- Autofix triggering is label-based; one managed comment is used for attempt state.
 - Runs only when invoked by downstream workflow.
 - Relies on visible check runs/statuses for the PR head SHA.
-- Simple first-page API reads are used (sufficient for expected small signal sets).
+- Simple first-page check/status reads are used (sufficient for expected small signal sets).
 
 ## Development
 
