@@ -180,10 +180,7 @@ def run(argv: list[str] | None = None) -> int:
 
         state = load_attempt_state(comments)
         attempts = attempts_for_head(state, head_sha=head_sha)
-        print(
-            "Autofix attempts for this PR head SHA: "
-            f"{len(attempts)}/{max_attempts}"
-        )
+        print(f"Autofix attempts for this PR head SHA: {len(attempts)}/{max_attempts}")
         if len(attempts) >= max_attempts:
             print("Attempt limit reached for this PR head SHA; no action required.")
             return 0

@@ -7,9 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 STATE_MARKER = "<!-- pre-commit-ci-autofix-trigger:state schema=v1 -->"
-_STATE_JSON_RE = re.compile(
-    rf"{re.escape(STATE_MARKER)}.*?```json\s*(.*?)\s*```", re.DOTALL
-)
+_STATE_JSON_RE = re.compile(rf"{re.escape(STATE_MARKER)}.*?```json\s*(.*?)\s*```", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -80,9 +78,7 @@ def parse_attempt_state_comment(comment: dict) -> AttemptState | None:
 
 def load_attempt_state(comments: list[dict]) -> AttemptState:
     states = [
-        state
-        for comment in comments
-        if (state := parse_attempt_state_comment(comment)) is not None
+        state for comment in comments if (state := parse_attempt_state_comment(comment)) is not None
     ]
     if not states:
         return AttemptState(comment_id=None, attempts=[])
