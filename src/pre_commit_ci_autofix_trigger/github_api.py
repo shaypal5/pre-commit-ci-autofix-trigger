@@ -69,6 +69,25 @@ class GitHubClient:
             )
         return data
 
+    def list_issue_comments(self, pr_number: int) -> list[dict]:
+        comments: list[dict] = []
+        page = 1
+        while True:
+            data = self._request(
+                "GET",
+                f"/repos/{self.owner}/{self.repo}/issues/{pr_number}/comments"
+                f"?per_page=100&page={page}",
+            )
+            if not isinstance(data, list):
+                raise GitHubApiError(
+                    "Unexpected response shape from comments endpoint: "
+                    f"expected list, got {type(data).__name__}"
+                )
+            comments.extend(data)
+            if len(data) < 100:
+                return comments
+            page += 1
+
     def get_check_runs(self, ref: str) -> list[dict]:
         data = self._request(
             "GET",
@@ -103,5 +122,31 @@ class GitHubClient:
             raise GitHubApiError(
                 "Unexpected response shape from add-label endpoint: "
                 f"expected list, got {type(data).__name__}"
+            )
+        return data
+
+    def create_issue_comment(self, pr_number: int, body: str) -> dict:
+        data = self._request(
+            "POST",
+            f"/repos/{self.owner}/{self.repo}/issues/{pr_number}/comments",
+            json={"body": body},
+        )
+        if not isinstance(data, dict):
+            raise GitHubApiError(
+                "Unexpected response shape from create-comment endpoint: "
+                f"expected dict, got {type(data).__name__}"
+            )
+        return data
+
+    def update_issue_comment(self, comment_id: int, body: str) -> dict:
+        data = self._request(
+            "PATCH",
+            f"/repos/{self.owner}/{self.repo}/issues/comments/{comment_id}",
+            json={"body": body},
+        )
+        if not isinstance(data, dict):
+            raise GitHubApiError(
+                "Unexpected response shape from update-comment endpoint: "
+                f"expected dict, got {type(data).__name__}"
             )
         return data
