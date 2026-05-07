@@ -49,6 +49,31 @@ def test_malformed_and_unrelated_comments_are_ignored() -> None:
     assert load_attempt_state(comments) == AttemptState(comment_id=None, attempts=[])
 
 
+def test_invalid_attempt_entries_are_ignored() -> None:
+    body = (
+        "<!-- pre-commit-ci-autofix-trigger:state schema=v1 -->\n"
+        "```json\n"
+        '{"schema": "v1", "attempts": [null, {"head_sha": ""}, {"head_sha": "abc123"}]}\n'
+        "```"
+    )
+
+    parsed = parse_attempt_state_comment(_comment(10, body))
+
+    assert parsed is not None
+    assert [attempt.head_sha for attempt in parsed.attempts] == ["abc123"]
+
+
+def test_state_comment_with_wrong_payload_schema_is_ignored() -> None:
+    body = (
+        "<!-- pre-commit-ci-autofix-trigger:state schema=v1 -->\n"
+        "```json\n"
+        '{"schema": "v2", "attempts": [{"head_sha": "abc123"}]}\n'
+        "```"
+    )
+
+    assert parse_attempt_state_comment(_comment(10, body)) is None
+
+
 def test_attempts_are_filtered_by_head_sha() -> None:
     state = AttemptState(
         comment_id=10,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from pre_commit_ci_autofix_trigger import cli
 from pre_commit_ci_autofix_trigger.attempts import (
     AttemptState,
@@ -33,6 +35,7 @@ class DummyClient:
         self.status_refs: list[str] = []
         self.commit_pull_refs: list[str] = []
         self._next_comment_id = 100
+        self._comment_created_at = datetime(2026, 5, 1, tzinfo=UTC)
 
     def get_pr(self, pr_number: int) -> dict:
         return {
@@ -64,9 +67,10 @@ class DummyClient:
         comment = {
             "id": self._next_comment_id,
             "body": body,
-            "created_at": f"2026-05-01T00:00:{self._next_comment_id:02d}Z",
+            "created_at": self._comment_created_at.isoformat().replace("+00:00", "Z"),
         }
         self._next_comment_id += 1
+        self._comment_created_at += timedelta(seconds=1)
         self.created_comments.append(comment)
         return comment
 
@@ -396,6 +400,32 @@ def test_cli_rejects_invalid_max_attempts(monkeypatch, capsys) -> None:
     assert "--max-attempts-per-head-sha must be at least 1" in err
 
 
+def test_cli_rejects_invalid_env_max_attempts(monkeypatch, capsys) -> None:
+    monkeypatch.setenv("MAX_ATTEMPTS_PER_HEAD_SHA", "abc")
+    monkeypatch.setattr(cli, "GitHubClient", DummyClient)
+
+    try:
+        cli.run(
+            [
+                "--repo-owner",
+                "acme",
+                "--repo-name",
+                "demo",
+                "--pr-number",
+                "33",
+                "--github-token",
+                "x",
+            ]
+        )
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:  # pragma: no cover - defensive, assertion should exit first
+        raise AssertionError("expected parser.error to exit")
+
+    err = capsys.readouterr().err
+    assert "--max-attempts-per-head-sha must be an integer" in err
+
+
 def test_cli_comment_read_failure_fails_closed(monkeypatch, capsys) -> None:
     class CommentReadErrorClient(DummyClient):
         def list_issue_comments(self, pr_number: int) -> list[dict]:
@@ -442,6 +472,127 @@ def test_cli_comment_write_failure_fails_closed(monkeypatch, capsys) -> None:
     err = capsys.readouterr().err
     assert rc == 1
     assert "unable to write autofix attempt state" in err
+
+
+def test_cli_comment_update_failure_fails_closed(monkeypatch, capsys) -> None:
+    class CommentUpdateErrorClient(DummyClient):
+        def __init__(self, token: str, owner: str, repo: str):
+            super().__init__(token, owner, repo)
+            self.created_comments = [
+                {
+                    "id": 1,
+                    "body": _state_body("different"),
+                    "created_at": "2026-05-01T00:00:01Z",
+                }
+            ]
+
+        def update_issue_comment(self, comment_id: int, body: str) -> dict:
+            raise GitHubApiError("comments unavailable")
+
+    monkeypatch.setattr(cli, "GitHubClient", CommentUpdateErrorClient)
+    rc = cli.run(
+        [
+            "--repo-owner",
+            "acme",
+            "--repo-name",
+            "demo",
+            "--pr-number",
+            "33",
+            "--github-token",
+            "x",
+        ]
+    )
+
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "unable to write autofix attempt state" in err
+
+
+def test_cli_comment_create_response_without_id_fails_closed(monkeypatch, capsys) -> None:
+    class CommentCreateShapeErrorClient(DummyClient):
+        def create_issue_comment(self, pr_number: int, body: str) -> dict:
+            self.created_comments.append({"body": body, "created_at": "2026-05-01T00:00:01Z"})
+            return {}
+
+    monkeypatch.setattr(cli, "GitHubClient", CommentCreateShapeErrorClient)
+    rc = cli.run(
+        [
+            "--repo-owner",
+            "acme",
+            "--repo-name",
+            "demo",
+            "--pr-number",
+            "33",
+            "--github-token",
+            "x",
+        ]
+    )
+
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "unable to identify saved autofix attempt state" in err
+
+
+def test_cli_comment_verify_read_failure_fails_closed(monkeypatch, capsys) -> None:
+    class CommentVerifyReadErrorClient(DummyClient):
+        def __init__(self, token: str, owner: str, repo: str):
+            super().__init__(token, owner, repo)
+            self.list_calls = 0
+
+        def list_issue_comments(self, pr_number: int) -> list[dict]:
+            self.list_calls += 1
+            if self.list_calls == 1:
+                return []
+            raise GitHubApiError("comments unavailable")
+
+    monkeypatch.setattr(cli, "GitHubClient", CommentVerifyReadErrorClient)
+    rc = cli.run(
+        [
+            "--repo-owner",
+            "acme",
+            "--repo-name",
+            "demo",
+            "--pr-number",
+            "33",
+            "--github-token",
+            "x",
+        ]
+    )
+
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "unable to verify autofix attempt state" in err
+
+
+def test_cli_comment_claim_not_visible_on_re_read_fails_closed(monkeypatch, capsys) -> None:
+    class CommentClaimInvisibleClient(DummyClient):
+        def __init__(self, token: str, owner: str, repo: str):
+            super().__init__(token, owner, repo)
+            self.list_calls = 0
+
+        def list_issue_comments(self, pr_number: int) -> list[dict]:
+            self.list_calls += 1
+            if self.list_calls == 1:
+                return []
+            return []
+
+    monkeypatch.setattr(cli, "GitHubClient", CommentClaimInvisibleClient)
+    rc = cli.run(
+        [
+            "--repo-owner",
+            "acme",
+            "--repo-name",
+            "demo",
+            "--pr-number",
+            "33",
+            "--github-token",
+            "x",
+        ]
+    )
+
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "saved autofix attempt state was not visible on re-read" in err
 
 
 def test_cli_uses_explicit_head_sha(monkeypatch) -> None:

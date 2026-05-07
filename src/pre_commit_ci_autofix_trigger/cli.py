@@ -39,7 +39,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--label", default=os.getenv("AUTOFIX_LABEL", "pre-commit.ci autofix"))
     parser.add_argument(
         "--max-attempts-per-head-sha",
-        type=int,
         default=os.getenv("MAX_ATTEMPTS_PER_HEAD_SHA", "2"),
     )
     parser.add_argument("--github-token", default=os.getenv("GITHUB_TOKEN"))
@@ -227,9 +226,6 @@ def run(argv: list[str] | None = None) -> int:
         if len(attempts) + 1 != len(verified_attempts):
             print("ERROR: concurrent autofix attempt state change detected", file=sys.stderr)
             return 1
-        if len(verified_attempts) > max_attempts:
-            print("Attempt limit reached after claim; no action required.")
-            return 0
 
         try:
             client.add_label(pr_number, args.label)
